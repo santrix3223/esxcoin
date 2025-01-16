@@ -10,12 +10,7 @@
     <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 </head>
 <body>
-    <h1>Dashboard de Eventos</h1>
-
-    <div>
-        <h2>Gráfico de Eventos</h2>
-        <canvas id="myChart" width="400" height="200"></canvas>
-    </div>
+    <h1>Dashboard de Eventos de Detección de Movimiento</h1>
 
     <table id="eventsTable" class="display">
         <thead>
@@ -29,6 +24,27 @@
         </tbody>
     </table>
 
-    <script src="/static/js/dashboard.js"></script>
+    <script>
+        $(document).ready(function () {
+            const table = $('#eventsTable').DataTable();
+
+            function fetchEvents() {
+                $.getJSON('/events', function (data) {
+                    table.clear();
+                    data.forEach(event => {
+                        table.row.add([
+                            event.device,
+                            event.event,
+                            event.timestamp
+                        ]).draw();
+                    });
+                });
+            }
+
+            // Actualiza los eventos cada 5 segundos
+            setInterval(fetchEvents, 5000);
+            fetchEvents(); // Llama una vez al cargar
+        });
+    </script>
 </body>
 </html>
