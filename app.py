@@ -1,45 +1,49 @@
-from flask import Flask, jsonify, request
-import sqlite3
+from flask import Flask, jsonify, render_template
+import requests
+from requests.auth import HTTPDigestAuth
+import threading
+import time
 
 app = Flask(__name__)
 
-# Ruta raíz
+# Configuración del dispositivo Hikvision
+devices = [
+    {"ip": "casahome2023.sytes.net", "username": "admin", "password": "Candelita@1981"}
+]
+
+# Lista para almacenar los eventos capturados
+events = []
+
+# Función para capturar eventos en tiempo real
+def capture_events(device):
+    url = f"http://{device['ip']}/ISAPI/Event/notification/alertStream"
+    try:
+        with requests.get(url, auth=HTTPDigestAuth(device['username'], device['password']), stream=True) as response:
+            if response.status_code == 200:
+                for line in response.iter_lines():
+                    if line:
+                        event_data = line.decode('utf-8')
+                        events.append({"device": device['ip'], "event": event_data, "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')})
+            else:
+                print(f"Error al conectar con {device['ip']}: {response.status_code}")
+    except Exception as e:
+        print(f"Error con el dispositivo {device['ip']}: {e}")
+
+# Iniciar captura de eventos en un hilo separado
+def start_capture():
+    for device in devices:
+        threading.Thread(target=capture_events, args=(device,), daemon=True).start()
+
+# Ruta para la interfaz del dashboard
 @app.route('/')
-def home():
-    return "Microservicio activo y conectado a la base de datos!"
+def dashboard():
+    return render_template('dashboard.html')
 
-# Ruta para obtener todos los usuarios
-@app.route('/usuarios', methods=['GET'])
-def obtener_usuarios():
-    conexion = sqlite3.connect('datos.db')
-    cursor = conexion.cursor()
-    
-    cursor.execute("SELECT * FROM usuarios")
-    filas = cursor.fetchall()
-    
-    usuarios = [{"id": fila[0], "nombre": fila[1], "edad": fila[2]} for fila in filas]
-    conexion.close()
-    
-    return jsonify(usuarios)
-
-# Ruta para agregar un nuevo usuario
-@app.route('/usuarios', methods=['POST'])
-def agregar_usuario():
-    datos = request.json
-    nombre = datos.get('nombre')
-    edad = datos.get('edad')
-    
-    if not nombre or not edad:
-        return jsonify({"error": "Faltan datos"}), 400
-    
-    conexion = sqlite3.connect('datos.db')
-    cursor = conexion.cursor()
-    
-    cursor.execute("INSERT INTO usuarios (nombre, edad) VALUES (?, ?)", (nombre, edad))
-    conexion.commit()
-    conexion.close()
-    
-    return jsonify({"mensaje": "Usuario agregado exitosamente"}), 201
+# Ruta para obtener eventos en tiempo real
+@app.route('/events')
+def get_events():
+    return jsonify(events)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    start_capture()  # Inicia la captura de eventos al arrancar el servidor
+    app.run(debug=True)
